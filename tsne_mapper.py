@@ -6,10 +6,8 @@
 import pandas as pd
 import numpy as np
 import kmapper as km
-from kmapper.visuals import *
 import sklearn
 from plotly.offline import download_plotlyjs, init_notebook_mode, plot, iplot
-from networkx_plot import *
 
 import igraph as ig
 
@@ -36,34 +34,42 @@ np.random.seed(1234)
 
 # Load dataset
 df = pd.read_csv("DetailedPlayerStats.csv", encoding='ANSI')
+df.dropna(inplace=True)
+
+# Map the positions to shorthand
+positions = {'Goalkeeper': 'GK', 'Defender': 'DEF', 'Forward': 'FWD', 'Midfielder': 'MID'}
+df['Position'] = df['Position'].map(lambda x: positions[x])
+df['Identifier'] = df['WebName'] + '-' + df['Team'] + '-' + df['Position']
 
 # Remove redundant features
-to_drop = ['Id', 'FirstName', 'SecondName', 'DreamTeam', 'SelectedBy',
+to_drop = ['Id', 'WebName', 'FirstName', 'SecondName', 'DreamTeam', 'SelectedBy',
            'Position', 'Team', 'FixtureWeek1', 'Opponent1', 'HomeAway1',
            'FixtureWeek2', 'Opponent2', 'HomeAway2', 'FixtureWeek3', 'Opponent3',
            'HomeAway3', 'GameWeek', 'Cost', 'NetTransfers', 'GoalsConceded']
 features = [col for col in df.columns if col not in to_drop]
 df = df[features]
 
-# Filter out players who didn't play
-df = df[df['MinutesPlayed'] > 0]
+# Filter out players who didn't play more than 15 mins
+# df = df[df['MinutesPlayed'] > 15]
 
 
 # Function to convert all stats to per 90
 def min_converter(row):
     mins = row['MinutesPlayed']
+    if mins == 0:
+        return row
     ret = []
     for col in row.index:
-        if col not in ['WebName', 'MinutesPlayed']:
-            ret.append(row[col] / mins * 90)
+        if col not in ['Identifier', 'Points', 'MinutesPlayed']:
+            ret.append(row[col] / float(mins) * 90.0)
         else:
             ret.append(row[col])
-    return row
+    return ret
 
 
 # Convert all values to per 90 mins
 df = df.apply(min_converter, axis=1)
-
+df.to_csv('UpdatedPlayerStats.csv', index=False, encoding='ANSI')
 # Drop the mins played - want to base players on their performance rather than time on the pitch
 df.drop('MinutesPlayed', axis=1, inplace=True)
 df.drop('CleanSheet', axis=1, inplace=True)
