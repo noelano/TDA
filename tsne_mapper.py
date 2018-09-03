@@ -49,9 +49,6 @@ to_drop = ['Id', 'WebName', 'FirstName', 'SecondName', 'DreamTeam', 'SelectedBy'
 features = [col for col in df.columns if col not in to_drop]
 df = df[features]
 
-# Filter out players who didn't play more than 15 mins
-# df = df[df['MinutesPlayed'] > 15]
-
 
 # Function to convert all stats to per 90
 def min_converter(row):
@@ -68,8 +65,13 @@ def min_converter(row):
 
 
 # Convert all values to per 90 mins
-df = df.apply(min_converter, axis=1)
-df.to_csv('UpdatedPlayerStats.csv', index=False, encoding='ANSI')
+df = df.apply(min_converter, axis=1, result_type='broadcast')
+df = df.apply(pd.to_numeric, errors='ignore')
+# df.to_csv('PlayerStats_Season1819.csv', index=False, encoding='ANSI')
+
+# Filter out players who didn't play more than 25 mins
+df = df[df['MinutesPlayed'] > 25]
+
 # Drop the mins played - want to base players on their performance rather than time on the pitch
 df.drop('MinutesPlayed', axis=1, inplace=True)
 df.drop('CleanSheet', axis=1, inplace=True)
@@ -78,7 +80,7 @@ df.drop('CleanSheet', axis=1, inplace=True)
 df['PassAccuracy'] = (df['PassesCompleted'] / df['AttemptedPasses']).replace(np.nan, 0)
 
 # Get average stats per game per player
-g = df.groupby(u'WebName')
+g = df.groupby('Identifier')
 df2 = g.aggregate(np.mean)
 
 # Drop fantasy related colunms - we only want to cluster players based on their in-game performance
@@ -98,7 +100,7 @@ lens = mapper.fit_transform(X.values, projection=sklearn.manifold.TSNE(), scaler
 graph = mapper.map(lens, X.values,
                    # clusterer=sklearn.cluster.DBSCAN(eps=0.3, min_samples=1),
                    clusterer=sklearn.cluster.KMeans(n_clusters=2, random_state=1234),
-                   nr_cubes=20, overlap_perc=0.9)
+                   nr_cubes=25, overlap_perc=0.5)
 
 # Get the players per cluster and overall cluster stats
 node_dict = {}
@@ -129,10 +131,11 @@ G.add_edges(edge_list)
 avg_points = []
 for node in G.vs.indices:
     avg_points.append(np.average([df2.iloc[i]['Points'] for i in graph['nodes'][node_list[node]]]))
-    G.vs[node]['size'] = len(node_dict[node_list[node]])
+    G.vs[node]['size'] = 2 * int(np.log(len(node_dict[node_list[node]]) + 1) + 1)
+    # G.vs[node]['size'] = len(node_dict[node_list[node]])
 
 links = G.get_edgelist()
-layt = G.layout('kk')
+layt = G.layout('fr')
 
 N = len(layt)
 Xnodes = [layt[k][0] for k in range(N)]  # x-coordinates of nodes
@@ -149,7 +152,7 @@ edges_trace = dict(type='scatter',
                    y=Yedges,
                    mode='lines',
                    line=dict(color='rgb(200,200,200)',
-                             width=0.5),
+                             width=0.3),
                    hoverinfo='none')
 
 nodes_trace = dict(type='scatter',
@@ -162,9 +165,7 @@ nodes_trace = dict(type='scatter',
                                showscale=True,
                                reversescale=False,
                                color=avg_points,
-                               # size=[x+1 for x in np.log2(G.vs['size'])],
                                size=G.vs['size'],
-                               # size=5,
                                line=dict(color='rgb(200,200,200)',
                                          width=0.5),
                                colorbar=dict(thickness=20,
